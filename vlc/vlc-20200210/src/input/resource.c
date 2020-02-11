@@ -112,9 +112,22 @@ static sout_instance_t *RequestSout( input_resource_t *p_resource,
     {
         if( p_resource->p_sout )
         {
+			// chenyj when reusing sout, i will remove it
+#if 1
+			msg_Dbg( p_resource->p_parent, "\\\\\\\\\\\\, when reusing sout, i will remove sout,0x%x %s  %s", p_sout, p_resource->p_sout->psz_sout, psz_sout);
+			DestroySout( p_resource );
+#if 1
+			msg_Dbg( p_resource->p_parent, "Sleep 1000");
+			Sleep(1000);
+#endif
+			msg_Dbg( p_resource->p_parent, "\\\\\\\\\\\\, when reusing sout, i will create sout, %s", psz_sout);
+			 p_resource->p_sout = sout_NewInstance( p_resource->p_parent, psz_sout );
+#else
+
             /* Reuse it */
             msg_Dbg( p_resource->p_parent, "reusing sout" );
             msg_Dbg( p_resource->p_parent, "you probably want to use gather stream_out" );
+#endif
         }
         else
         {

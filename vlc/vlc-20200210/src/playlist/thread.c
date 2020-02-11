@@ -35,6 +35,8 @@
 #include <vlc_rand.h>
 #include "stream_output/stream_output.h"
 #include "playlist_internal.h"
+// chenyj tell client:player is playing. .h file
+#include <vlc_network.h>
 
 /*****************************************************************************
  * Local prototypes
@@ -401,6 +403,12 @@ static playlist_item_t *NextItem( playlist_t *p_playlist )
 
         p_playlist->i_current_index++;
         assert( p_playlist->i_current_index <= p_playlist->current.i_size );
+	    // chenyj fix:alway repeat when remove repeat
+		if( !b_loop)
+		{
+			msg_Dbg( p_playlist, "chenyj no loop, return");
+			return NULL;
+		}
         if( p_playlist->i_current_index == p_playlist->current.i_size )
         {
             if( !b_loop || p_playlist->current.i_size == 0 )

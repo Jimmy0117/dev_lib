@@ -530,6 +530,11 @@ void libvlc_InternalCleanup( libvlc_int_t *p_libvlc )
     }
 #endif
 
+    // chenyj playce function playlist_Destroy before
+    /* Free playlist now, all threads are gone */
+	playlist_t *p_playlist = libvlc_priv(p_libvlc)->playlist;
+    if( p_playlist != NULL )
+        playlist_Destroy( p_playlist );
 #if !defined( _WIN32 ) && !defined( __OS2__ )
     char *pidfile = var_InheritString( p_libvlc, "pidfile" );
     if( pidfile != NULL )

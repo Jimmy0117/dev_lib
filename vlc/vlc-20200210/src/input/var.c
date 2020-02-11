@@ -36,6 +36,8 @@
 
 #include "input_internal.h"
 
+// chenyj test
+extern double g_iVlc_value_t;
 /*****************************************************************************
  * Callbacks
  *****************************************************************************/
@@ -611,7 +613,24 @@ static int PositionCallback( vlc_object_t *p_this, char const *psz_cmd,
         }
 
         /* */
-        input_ControlPush( p_input, INPUT_CONTROL_SET_POSITION, &newval );
+		msg_Info( p_input, "$$$$$$$$$, PositionCallback, input_ControlPush INPUT_CONTROL_SET_POSITION" );
+		// chenyj test
+#if 1
+		char *strFileType = strstr(p_input->p->p_item->psz_uri, ".rmvb");
+		msg_Info( p_input, "fileType %s", strFileType);
+		if (strFileType)
+		{
+			msg_Info( p_input, "Is rmvb video");
+			g_iVlc_value_t = 0;
+			input_ControlPush( p_input, INPUT_CONTROL_SET_POSITION, &newval );
+			 
+		}
+		else
+		{
+			msg_Info( p_input, "Is not rmvb video");	
+			g_iVlc_value_t = newval.f_float;
+		}
+#endif
     }
     return VLC_SUCCESS;
 }

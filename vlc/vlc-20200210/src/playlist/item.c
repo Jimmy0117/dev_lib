@@ -424,10 +424,88 @@ int playlist_AddExt( playlist_t *p_playlist, const char * psz_uri,
     p_input = input_item_NewExt( psz_uri, psz_name,
                                  i_options, ppsz_options, i_option_flags,
                                  i_duration );
-    if( p_input == NULL )
-        return VLC_ENOMEM;
-    i_ret = playlist_AddInput( p_playlist, p_input, i_mode, i_pos, b_playlist,
-                               b_locked );
+	if( p_input == NULL )
+		return VLC_ENOMEM;
+
+	// chenyj read broad address from regedit
+#if 1
+	char		strAddrTemp[256] = "";
+	char        strTempTrap[256] = "";
+ 
+	// CDC地址
+#define		REG_CDC_ADDR_PATH			TEXT("Software\\Centerm\\TeacherClient")
+#define		REG_CDC_ADDR				TEXT("CdcAddress")
+#define		XCDC_SERVICE_ADDR			"http://239.1.1.1:80"
+
+	if ( ERROR_SUCCESS != CTRegReadString(HKEY_LOCAL_MACHINE, REG_CDC_ADDR_PATH, REG_CDC_ADDR, strAddrTemp, XCDC_SERVICE_ADDR) )
+	{
+		strcpy(strAddrTemp, XCDC_SERVICE_ADDR);
+	}
+	OutputDebugString("liyl: item read CdcAddress:");
+	OutputDebugString(strAddrTemp);
+	
+	if (FALSE == GetBroadIpFromDomain1(strAddrTemp, strTempTrap))
+	{
+		sprintf(strTempTrap, "239.1.1.1");
+	}
+	OutputDebugString("liyl: item GetBroadIpFromDomain1:");
+	OutputDebugString(strTempTrap);
+
+	// chenyj modify 流 -> filename
+	char strName[1024] = "";
+	char strOption[2048] = "";
+
+	strcpy(strName,  p_input->psz_name);
+	vlc_gc_decref( p_input );
+	p_input = input_item_New(psz_uri, strName);
+	if( p_input == NULL )
+		return VLC_ENOMEM;
+
+	//p_input = input_item_New(psz_uri, _("Streaming") );
+
+	// liyl add cache time
+    #define		REG_CACHE_TIME				TEXT("CacheTime")
+    #define		XCACHE_TIME                             300
+	DWORD dwCacheTime = XCACHE_TIME;
+	if ( ERROR_SUCCESS != CTRegReadDword(HKEY_LOCAL_MACHINE, REG_CDC_ADDR_PATH, REG_CACHE_TIME, &dwCacheTime, XCACHE_TIME) )
+	{
+		PL_DEBUG("CTRegReadDword failed， Set cache time to %d.\n", XCACHE_TIME);
+        OutputDebugString("CTRegReadDword failed， Set cache time to 15000.\n");
+		dwCacheTime = XCACHE_TIME;
+	}
+	char strCacheTime[56] = "";
+	sprintf(strCacheTime, "file-caching=%d", dwCacheTime);
+    OutputDebugString(strCacheTime);
+	PL_DEBUG("cache time is %s.\n", strCacheTime);
+	input_item_AddOption( p_input, strCacheTime, VLC_INPUT_OPTION_TRUSTED);
+
+	// chenyj
+	FILE *stream = NULL;
+	if( (stream  = fopen( "udp", "r" )) != NULL )
+	{
+		fclose( stream );
+		sprintf(strOption, ":sout=#transcode{vcodec=h264,scale=1,width=800,height=600,fps=15,acodec=mpga,ab=128,channels=2,samplerate=44100}:duplicate{dst=display,dst=udp{dst=%s:5004}}", strTempTrap);
+		PL_DEBUG("set to udp, %s", strOption);
+		input_item_AddOption( p_input, strOption, VLC_INPUT_OPTION_TRUSTED );
+	}
+	else
+	{
+		sprintf(strOption, ":sout=#transcode{vcodec=h264,scale=1,width=800,height=600,fps=15,acodec=mpga,ab=128,channels=2,samplerate=44100}:duplicate{dst=rtp{dst=%s,port=5004,mux=ts},dst=display}", strTempTrap);
+		PL_DEBUG("set to rtp, %s", strOption);
+		input_item_AddOption( p_input, strOption, VLC_INPUT_OPTION_TRUSTED );
+	}
+	 
+
+	input_item_AddOption( p_input, _("sout-keep"),
+						VLC_INPUT_OPTION_TRUSTED );
+	// chenyj
+	PL_DEBUG( "======playlist_AddExt, Will Use rtp model, call playlist_AddInput ");
+	i_ret = playlist_AddInput( p_playlist, p_input,
+						PLAYLIST_APPEND | PLAYLIST_GO, PLAYLIST_END, true, pl_Unlocked );
+#else
+    i_ret = playlist_AddInput(p_playlist, p_input, i_mode, i_pos, b_playlist,
+            b_locked);
+#endif
     vlc_gc_decref( p_input );
     return i_ret;
 }

@@ -55,6 +55,8 @@
 #include <vlc_fs.h>
 #include <vlc_strings.h>
 #include <vlc_modules.h>
+// chenyj test
+double g_iVlc_value_t = 0;
 
 /*****************************************************************************
  * Local prototypes
@@ -1281,6 +1283,21 @@ static int Init( input_thread_t * p_input )
 
     /* initialization is complete */
     input_ChangeState( p_input, PLAYING_S );
+	// chenyj test
+#if 1
+	if (0 != g_iVlc_value_t)
+	{
+		// b_force_update = Control( p_input, INPUT_CONTROL_SET_POSITION, val );
+		if( demux_Control( p_input->p->input.p_demux, DEMUX_SET_POSITION, g_iVlc_value_t, !p_input->p->b_fast_seek ) )
+		{
+			msg_Err( p_input, "Init demux_Control INPUT_CONTROL_SET_POSITION %f failed", g_iVlc_value_t);
+		}
+		else
+		{
+			msg_Info( p_input, "Init demux_Control INPUT_CONTROL_SET_POSITION %f sucess", g_iVlc_value_t);
+		}
+	}
+#endif
 
     return VLC_SUCCESS;
 

@@ -1062,13 +1062,22 @@ static int  Open ( vlc_object_t *p_this )
     if( var_GetBool( p_enc, SOUT_CFG_PREFIX "aud" ) )
         p_sys->param.b_aud = true;
 
+	// chenyj set sout-x264-keyint to 1
+#if 0
     i_val = var_GetInteger( p_enc, SOUT_CFG_PREFIX "keyint" );
+#else
+	i_val = 1;
+#endif
     if( i_val > 0 && i_val != 250 ) p_sys->param.i_keyint_max = i_val;
 #if X264_BUILD >= 102
     if( i_val == -1 ) p_sys->param.i_keyint_max = X264_KEYINT_MAX_INFINITE;
 #endif
-
+	// chenyj set sout-x264-min-keyint to 1
+#if 0
     i_val = var_GetInteger( p_enc, SOUT_CFG_PREFIX "min-keyint" );
+#else
+	i_val = 1;
+#endif
     if( i_val > 0 && i_val != 25 ) p_sys->param.i_keyint_min = i_val;
 
 #if X264_BUILD >= 102 && X264_BUILD <= 114
@@ -1515,7 +1524,12 @@ static block_t *Encode( encoder_t *p_enc, picture_t *p_pict )
     for( i = 0; i < i_nal; i++ )
         i_out += nal[i].i_payload;
 
+	// chenyj add video data count in the tail of packet
+#if 1
     p_block = block_Alloc( i_out + p_sys->i_sei_size );
+#else
+	p_block = block_Alloc( i_out + p_sys->i_sei_size + 2);
+#endif
     if( !p_block ) 
 	{
 		return NULL;

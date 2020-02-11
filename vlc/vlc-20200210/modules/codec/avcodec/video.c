@@ -249,6 +249,9 @@ int InitVideoDec( decoder_t *p_dec, AVCodecContext *p_context,
     if( i_val ) p_sys->p_context->debug_mv = i_val;
 
     i_val = var_CreateGetInteger( p_dec, "avcodec-skiploopfilter" );
+	// chenyj set avcodec-skiploopfilter
+	 msg_Dbg( p_dec, "++++++++++set i_val = 4" );
+    i_val = 4;
     if( i_val >= 4 ) p_sys->p_context->skip_loop_filter = AVDISCARD_ALL;
     else if( i_val == 3 ) p_sys->p_context->skip_loop_filter = AVDISCARD_NONKEY;
     else if( i_val == 2 ) p_sys->p_context->skip_loop_filter = AVDISCARD_BIDIR;
@@ -716,8 +719,8 @@ picture_t *DecodeVideo( decoder_t *p_dec, block_t **pp_block )
         mtime_t i_display_date = 0;
         if( !p_block || !(p_block->i_flags & BLOCK_FLAG_PREROLL) )
             i_display_date = decoder_GetDisplayDate( p_dec, i_pts );
-
-        if( i_display_date > 0 && i_display_date <= mdate() )
+		// chenyj set i_late_frames to 0
+        if( 0/*i_display_date > 0 && i_display_date <= mdate()*/ )
         {
             p_sys->i_late_frames++;
             if( p_sys->i_late_frames == 1 )

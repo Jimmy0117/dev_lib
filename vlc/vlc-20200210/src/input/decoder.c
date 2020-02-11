@@ -52,14 +52,20 @@
 #include "resource.h"
 
 #include "../video_output/vout_control.h"
+bool g_bClientReadyVideo = false;
+bool g_bClientReadyAudio = false;
+bool g_bUdpThreadOver = false;
+char g_strIpAddress[256] = "";
+decoder_t *g_p_dec = NULL;
 
 static decoder_t *CreateDecoder( vlc_object_t *, input_thread_t *,
                                  es_format_t *, bool, input_resource_t *,
                                  sout_instance_t *p_sout );
 static void       DeleteDecoder( decoder_t * );
-
+static void      *UdpReceiveThread( void * );
 static void      *DecoderThread( void * );
 static void       DecoderProcess( decoder_t *, block_t * );
+static void       DecoderError( decoder_t *p_dec, block_t *p_block );
 static void       DecoderOutputChangePause( decoder_t *, bool b_paused, mtime_t i_date );
 static void       DecoderFlush( decoder_t * );
 static void       DecoderSignalWait( decoder_t *, bool );
@@ -241,6 +247,8 @@ int decoder_GetDisplayRate( decoder_t *p_dec )
 
     return p_dec->pf_get_display_rate( p_dec );
 }
+// chenyj create UDP receive thread
+vlc_thread_t g_udpReceiveThread = NULL;
 
 /* TODO: pass p_sout through p_resource? -- Courmisch */
 static decoder_t *decoder_New( vlc_object_t *p_parent, input_thread_t *p_input,
@@ -279,7 +287,32 @@ static decoder_t *decoder_New( vlc_object_t *p_parent, input_thread_t *p_input,
         i_priority = VLC_THREAD_PRIORITY_AUDIO;
     else
         i_priority = VLC_THREAD_PRIORITY_VIDEO;
+	// chenyj create UDP receive thread
+#if 1
+	if (p_dec->fmt_out.i_cat == VIDEO_ES && p_sout)
+	{
+		g_bUdpThreadOver = false;
+		g_bClientReadyVideo = false;
+		g_bClientReadyAudio = false;
 
+		msg_Info(p_dec, "decoder_New , create udp receive thread");
+        /*
+        if (vlc_clone(&g_udpReceiveThread, UdpReceiveThread, p_parent, VLC_THREAD_PRIORITY_LOW))
+		{
+			msg_Err( p_dec, "+++++++ cannot create udp receive thread");
+		}
+        */
+
+		//FILE *stream = NULL;
+		//if( (stream  = fopen("beginning", "w+" )) != NULL )
+		//{
+		//	fclose( stream ); 
+		//}
+	}
+#endif
+
+	msg_Info(p_dec, "decoder_New,create thread:DecoderThread, 0x%x  %d %d", p_dec, i_priority, p_dec->fmt_out.i_cat);
+	
     /* Spawn the decoder thread */
     if( vlc_clone( &p_dec->p_owner->thread, DecoderThread, p_dec, i_priority ) )
     {
@@ -330,6 +363,14 @@ void input_DecoderDelete( decoder_t *p_dec )
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
 
     vlc_cancel( p_owner->thread );
+	// chenyj create UDP receive thread
+	if ( g_udpReceiveThread && 0 == strcmp(module_get_object(p_dec->p_module), "packetizer_h264") )
+	{
+		msg_Info( p_dec, "+++++++input_DecoderDelete, vlc_cancel g_udpReceiveThread" );
+		vlc_cancel( g_udpReceiveThread );
+		g_udpReceiveThread = NULL;
+	}
+	
 
     /* Make sure we aren't paused/waiting/decoding anymore */
     vlc_mutex_lock( &p_owner->lock );
@@ -941,6 +982,72 @@ int GetLocalIp(vlc_object_t *p_parent, char *strIp)
 		pIpAdapterInfo = NULL;
 	}
 	return 0;
+}
+// chenyj create UDP receive thread
+static void *UdpReceiveThread(void *p_data)
+{
+	vlc_object_t *p_parent = (vlc_object_t *)p_data;
+	int fd = -1;
+	char strServerIp[256] = "";
+
+	#define PACKETSIZE 65535
+
+	msg_Info(p_parent, "----->Enter Udp Receive Thread");
+
+	// chenyj read local ip address
+#if 1
+	char strIp[256] = { 0 };
+	GetLocalIp(p_parent, strIp);
+	msg_Info(p_parent, "get the local ip address: %s", strIp);
+#else
+
+
+#endif
+	fd = net_OpenDgram( p_parent, strIp, 5004,
+							strServerIp, 0, IPPROTO_UDP );
+	if( fd == -1 )
+	{
+		msg_Err( p_parent, "Udp Receive Thread, cannot open socket" );
+		goto T_OUT;
+	}
+	for (;;)
+	{
+		block_t *p_block = block_Alloc( PACKETSIZE );
+		if( unlikely(p_block == NULL) )
+		{
+			msg_Err( p_parent, "Udp Receive Thread, block_Alloc failed" );
+			goto T_OUT;
+		}
+		ssize_t len = net_Read( p_parent, fd, NULL,
+								p_block->p_buffer, PACKETSIZE, false );
+		if( len < 0 )
+		{
+			block_Release( p_block );
+			msg_Err( p_parent, "Udp Receive Thread, net_Read failed" );
+			goto T_OUT;
+		}
+		msg_Info(p_parent, "Udp Receive Thread,net_Read success (%d):0x%x 0x%x", 
+							len, 
+							p_block->p_buffer[0],
+							p_block->p_buffer[1]);
+		if ( 0x80 == p_block->p_buffer[0] && 0x66 == p_block->p_buffer[1])
+		{
+			g_bClientReadyVideo = true;
+			g_bClientReadyAudio = true;
+		}
+		
+		block_Release( p_block );
+	}
+	
+T_OUT:
+	g_bUdpThreadOver = true;
+	if (fd != -1)
+	{
+		net_Close( fd );
+	}
+	msg_Info(p_parent, "<---Leave Udp Receive Thread");
+
+	return NULL;
 }
 /**
  * The decoding main loop
@@ -1821,7 +1928,106 @@ static void DecoderProcessOnFlush( decoder_t *p_dec )
     }
     vlc_mutex_unlock( &p_owner->lock );
 }
+void TellClientPaused()
+{
+	uint8_t strMessage[256];
 
+	strMessage[0] = 0x80;
+	strMessage[1] = 0x69;
+
+	msg_Dbg (g_p_dec, "++++++++tell client:Server Paused, %s", g_strIpAddress);
+	int fd = net_ConnectDgram( g_p_dec, g_strIpAddress, 5004, -1, 17);
+
+	int iRet = send(fd, (const char *)strMessage, 2, 0); 
+	msg_Dbg (g_p_dec, "+++++++tell client:Server Paused, retsult(%d)", iRet);
+
+	net_Close(fd);
+}
+void TellClientNewVideo(decoder_t *p_dec)
+{
+	uint8_t strMessage[256];
+	bool bFullScreenStudent = false;
+	FILE *stream = NULL;
+
+#if 0
+	strMessage[0] = 0x80;
+	strMessage[1] = 0x68;
+#else
+	int iIpFirst = 0, iIpSecond = 0, iIpThird = 0, iIpForth = 0;
+	char strIp[256] = {0};
+
+	if( (stream  = fopen("fullscreenStudent", "r" )) != NULL )
+	{
+		bFullScreenStudent = true;
+		fclose( stream ); 
+	}
+	if (( stream  = fopen("serverIp", "r" )) != NULL)
+	{
+		int iRet = fread(strIp, 1, 30, stream);
+		msg_Dbg (p_dec, "Tell Client New Video, fread serverIp return %d, %s", iRet, strIp);
+		fclose(stream);	  
+	}
+	sscanf(strIp, "%d.%d.%d.%d", &iIpFirst, &iIpSecond, &iIpThird, &iIpForth);
+	msg_Info(p_dec, "++++++++parse to : %d %d %d %d", iIpFirst, iIpSecond, iIpThird, iIpForth);
+
+	strMessage[0] = 0x80;
+	strMessage[1] = 0x68;
+	strMessage[2] = bFullScreenStudent ? 0x0 : 0x1;
+	strMessage[3] = iIpFirst;
+	strMessage[4] = iIpSecond;
+	strMessage[5] = iIpThird;
+	strMessage[6] = iIpForth;
+	strMessage[7] = 50;
+	strMessage[8] = 04;
+#endif
+
+	g_p_dec = p_dec;
+
+	if( (stream  = fopen("playAfterPause", "r" )) != NULL )
+	{
+		fclose(stream);
+		msg_Dbg (p_dec, "Tell Client NewVideo, remove playAfterPause");
+		remove("playAfterPause");
+
+		return ;
+	}
+
+	msg_Dbg (p_dec, "++++++++tell client:This is new video, %s", g_strIpAddress);
+	int fd = net_ConnectDgram( p_dec, g_strIpAddress, 5004, -1, 17);
+#if 0
+	int iRet = send(fd, (const char *)strMessage, 2, 0 ); 
+#else
+	int iRet = send(fd, (const char *)strMessage, 9, 0 ); 
+#endif
+	msg_Dbg (p_dec, "+++++++tell client:This is new video, retsult(%d)", iRet);
+
+	net_Close(fd);
+}
+void My_Aout_DecChangePause()
+{
+	// chenyj let audio pause delay
+	if( g_p_dec->p_owner->p_aout )
+	{
+		msg_Info( g_p_dec, "My_Aout_DecChangePause, aout_DecChangePause true");
+		aout_DecChangePause(g_p_dec->p_owner->p_aout, true, 0 );
+	}
+}
+void TellClientIamWaiting(decoder_t *p_dec)
+{
+	uint8_t strMessage[256];
+
+	strMessage[0] = 0x80;
+	strMessage[1] = 0x67;
+	
+	msg_Dbg (p_dec, "++++++++tell client:I am waiting, %s", g_strIpAddress);
+	int fd = net_ConnectDgram( p_dec, g_strIpAddress, 5004, -1, 17);
+
+	int iRet = send(fd, (const char *)strMessage, 2, 0 ); 
+	msg_Dbg (p_dec, "+++++++tell client:I am waiting, retsult(%d)", iRet);
+
+	net_Close(fd);
+
+}
 /**
  * Decode a block
  *
@@ -1896,6 +2102,17 @@ flush:
         DecoderProcessOnFlush( p_dec );
 }
 
+static void DecoderError(decoder_t *p_dec, block_t *p_block)
+{
+    const bool b_flush_request = p_block && (p_block->i_flags & BLOCK_FLAG_CORE_FLUSH);
+
+    /* */
+    if (p_block)
+        block_Release(p_block);
+
+    if (b_flush_request)
+        DecoderProcessOnFlush(p_dec);
+}
 /**
  * Destroys a decoder object
  *
@@ -2024,6 +2241,10 @@ static int aout_update_format( decoder_t *p_dec )
 {
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
 
+	// chenyj add arge g_pDec
+#if 1
+	g_p_dec= p_dec;
+#endif
     if( p_owner->p_aout
      && !AOUT_FMTS_IDENTICAL(&p_dec->fmt_out.audio, &p_owner->audio) )
     {

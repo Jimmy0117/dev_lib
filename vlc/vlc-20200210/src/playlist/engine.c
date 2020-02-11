@@ -34,6 +34,14 @@
 #include <vlc_interface.h>
 #include "playlist_internal.h"
 #include "input/resource.h"
+#include "CTReg.h"
+#include <vlc_network.h>
+
+
+extern char g_strIpAddress[256];
+
+
+vlc_object_t *g_p_parent = NULL;
 
 /*****************************************************************************
  * Local prototypes
@@ -188,6 +196,78 @@ static int VideoSplitterCallback( vlc_object_t *p_this, char const *psz_cmd,
     return VLC_SUCCESS;
 }
 
+// chenyj create HeartThread
+vlc_thread_t g_heartThread = NULL;
+
+static void *HeartThread(void *p_data)
+{
+	vlc_object_t *p_parent = (vlc_object_t *)p_data;
+	int fd = -1;
+	char strServerIp[256] = "";
+	FILE *stream = NULL;
+	bool bFullScreenStudent = false;
+	int iIpFirst = 0, iIpSecond = 0, iIpThird = 0, iIpForth = 0;
+	char strIp[256] = {0};
+	uint8_t strMessage[256];
+
+	msg_Info(p_parent, "--->Enter HeartThread");
+	if (( stream  = fopen("serverIp", "r" )) != NULL)
+	{
+		int iRet = fread(strIp, 1, 30, stream);
+		msg_Dbg (p_parent, "fread serverIp return %d, %s", iRet, strIp);
+		fclose(stream);	  
+	}
+	sscanf(strIp, "%d.%d.%d.%d", &iIpFirst, &iIpSecond, &iIpThird, &iIpForth);
+	msg_Info(p_parent, "parse to : %d %d %d %d", iIpFirst, iIpSecond, iIpThird, iIpForth);
+
+	for (;;)
+	{
+		Sleep(6*1000);
+
+		if( (stream  = fopen("fullscreenStudent", "r" )) != NULL )
+		{
+			bFullScreenStudent = true;
+			fclose( stream ); 
+		}
+		else
+		{
+			bFullScreenStudent = false;
+		}
+		strMessage[0] = 0x80;
+		strMessage[1] = 0x65;
+		strMessage[2] = bFullScreenStudent ? 0x0 : 0x1;
+		strMessage[3] = iIpFirst;
+		strMessage[4] = iIpSecond;
+		strMessage[5] = iIpThird;
+		strMessage[6] = iIpForth;
+		strMessage[7] = 50;
+		strMessage[8] = 04;
+
+		fd = net_ConnectDgram( p_parent, g_strIpAddress, 5004, -1, 17);
+		if( fd == -1 )
+		{
+			msg_Err( p_parent, "heart thread cannot open socket" );
+			goto T_OUT;
+		} 
+
+		int iRet = send(fd, (const char *)strMessage, 9, 0 ); 
+ 
+		msg_Dbg (p_parent, "heart thread send heart retsult(%d)", iRet);
+
+		if (fd != -1)
+		{
+			net_Close( fd );
+		}
+	}
+
+T_OUT:
+
+	msg_Info(p_parent, "<---Leave HeartThread");
+
+	return NULL;
+}
+
+int GetLocalIp(vlc_object_t *p_parent, char *strIp);
 /**
  * Create playlist
  *
@@ -309,6 +389,119 @@ playlist_t *playlist_Create( vlc_object_t *p_parent )
         free( mods );
     }
 
+#if 1
+
+	static BOOL sbFirst = TRUE;
+
+	if (TRUE == sbFirst)
+	{
+		// chenyj when player starting , remove file playAfterPause  waiting pauseAfterSlide
+		//remove("playAfterPause");
+		//remove("waiting");
+		//remove("pauseAfterSlide");
+
+		uint8_t strMessage[256];
+		bool bFullScreenStudent = false;
+
+		FILE *stream = NULL;
+		if( (stream  = fopen("fullscreenStudent", "r" )) != NULL )
+		{
+			bFullScreenStudent = true;
+			fclose( stream ); 
+		}
+		// chenyj read broad address from regedit
+#if 1
+		char strAddrTemp[256] = "";
+		char strIpAddress[256] = "";
+
+		// CDC地址
+#define		REG_CDC_ADDR_PATH			TEXT("Software\\Centerm\\TeacherClient")
+#define		REG_CDC_ADDR				TEXT("CdcAddress")
+#define		XCDC_SERVICE_ADDR			"http://239.1.1.1:80"
+
+		if ( ERROR_SUCCESS != CTRegReadString(HKEY_LOCAL_MACHINE, REG_CDC_ADDR_PATH, REG_CDC_ADDR, strAddrTemp, XCDC_SERVICE_ADDR) )
+		{
+			msg_Dbg (p_playlist, "CTRegReadString failed Set Cdc Address to %s \n", XCDC_SERVICE_ADDR);
+			strcpy(strAddrTemp, XCDC_SERVICE_ADDR);
+		}
+		if (FALSE == GetBroadIpFromDomain(strAddrTemp, strIpAddress))
+		{
+			sprintf(strIpAddress, "239.1.1.1");
+			msg_Dbg (p_playlist, "GetBroadIpFromDomain failed Set Cdc Address to %s \n", strIpAddress);
+		}
+		strcpy(g_strIpAddress, strIpAddress);
+		
+#endif
+		// chenyj read local ip address
+#if 1
+		char strIp[256] = { 0 };
+		int iIpFirst = 0, iIpSecond = 0, iIpThird = 0, iIpForth = 0;
+
+		GetLocalIp(p_parent, strIp);
+		msg_Info(p_playlist, "get the local ip address: %s", strIp);
+#else
+
+#endif
+		sscanf(strIp, "%d.%d.%d.%d", &iIpFirst, &iIpSecond, &iIpThird, &iIpForth);
+		msg_Info(p_playlist, "++++++++parse to : %d %d %d %d", iIpFirst, iIpSecond, iIpThird, iIpForth);
+
+		strMessage[0] = 0x80;
+		strMessage[1] = 0x63;
+		strMessage[2] = 0x0;
+		strMessage[3] = bFullScreenStudent ? 0x0 : 0x1;
+		strMessage[4] = iIpFirst;
+		strMessage[5] = iIpSecond;
+		strMessage[6] = iIpThird;
+		strMessage[7] = iIpForth;
+		strMessage[8] = 50;
+		strMessage[9] = 04;
+
+		msg_Dbg (p_playlist, "tell client:player is starting, bFullScreenStudent %d (%d %d %d %d) %d", 
+					bFullScreenStudent,
+					iIpFirst,
+					iIpSecond,
+					iIpThird,
+					iIpForth,
+					5004);
+       
+#if 1
+ 
+		if( (stream  = fopen("broadCastIp", "w+" )) != NULL )
+		{
+			int iRet = fwrite(g_strIpAddress, 1, strlen(g_strIpAddress), stream);
+			msg_Dbg( p_playlist, "playlist_Create, fwrite broadCastIp %s ret %d ", g_strIpAddress, iRet);
+			fclose( stream ); 
+		}
+
+		if( (stream  = fopen("serverIp", "w+" )) != NULL )
+		{
+			int iRet = fwrite(strIp, 1, strlen(strIp), stream);
+			msg_Dbg( p_playlist, "playlist_Create, fwrite serverIp  %s ret %d ", strIp, iRet);
+			fclose( stream ); 
+		}
+#endif
+		int fd = net_ConnectDgram( p_parent, strIpAddress, 5004, -1, 17);
+
+		int iRet = send(fd, (const char *)strMessage, 10, 0 ); 
+		msg_Dbg (p_playlist, "tell client:player is starting, retsult(%d)", iRet);
+
+		net_Close(fd);
+
+		g_p_parent = p_parent;
+		sbFirst = FALSE;
+		// chenyj create heart thread
+        
+        /*if (vlc_clone(&g_heartThread, HeartThread, p_parent, VLC_THREAD_PRIORITY_LOW))
+		{
+			msg_Err( p_playlist, "playlist_Create,  cannot create heart thread");
+		}
+        */
+
+	}
+	
+	
+#endif
+
     return p_playlist;
 }
 
@@ -322,6 +515,71 @@ playlist_t *playlist_Create( vlc_object_t *p_parent )
 void playlist_Destroy( playlist_t *p_playlist )
 {
     playlist_private_t *p_sys = pl_priv(p_playlist);
+
+	// chenyj  destroy heart thread
+#if 1
+	if (g_heartThread)
+	{
+		msg_Info(p_playlist, "playlist_Destroy, vlc_cancel g_heartThread" );
+		vlc_cancel(g_heartThread );
+	}
+	g_heartThread = NULL;
+#endif
+
+	// chenyj tell client:player is closed
+#if 1
+	uint8_t strMessage[256];
+	char strIpAddress[256] = "";
+
+	// chenyj read broad address from regedit
+#if 1
+ 
+	FILE *stream = NULL;
+	if (( stream  = fopen("broadCastIp", "r" )) != NULL)
+	{
+		int iRet = fread(strIpAddress, 1, 30, stream);
+		msg_Dbg (p_playlist, "playlist_Destroy, fread broadCastIp return %d, %s", iRet, strIpAddress);
+		fclose(stream);	  
+	}
+	else
+	{
+		msg_Err (p_playlist, "playlist_Destroy, fread broadCastIp failed");  
+		char		strAddrTemp[256] = "";
+
+		// CDC地址
+#define		REG_CDC_ADDR_PATH			TEXT("Software\\Centerm\\TeacherClient")
+#define		REG_CDC_ADDR				TEXT("CdcAddress")
+#define		XCDC_SERVICE_ADDR			"http://239.1.1.1:80"
+
+		if ( ERROR_SUCCESS != CTRegReadString(HKEY_LOCAL_MACHINE, REG_CDC_ADDR_PATH, REG_CDC_ADDR, strAddrTemp, XCDC_SERVICE_ADDR) )
+		{
+			msg_Dbg (p_playlist, "CTRegReadString failed Set Cdc Address to %s \n", XCDC_SERVICE_ADDR);
+			strcpy(strAddrTemp, XCDC_SERVICE_ADDR);
+		}
+		if (FALSE == GetBroadIpFromDomain(strAddrTemp, strIpAddress))
+		{
+			sprintf(strIpAddress, "239.1.1.1");
+			msg_Dbg (p_playlist, "GetBroadIpFromDomain failed Set Cdc Address to %s \n", strIpAddress);
+		}
+	}
+
+#endif
+
+	strMessage[0] = 0x80;
+	strMessage[1] = 0x63;
+	strMessage[2] = 0x1;
+	strMessage[3] = 0x0;
+	msg_Dbg (p_playlist, "tell client:player is closed");
+
+	int fd = net_ConnectDgram( g_p_parent, strIpAddress, 5004, -1, 17);
+
+	int iRet = send(fd, (const char *)strMessage, 4, 0 ); 
+	msg_Dbg (p_playlist, "tell client:player is closed, retsult(%d)", iRet);
+
+	net_Close(fd);
+
+#endif
+
 
     /* Remove all services discovery */
     playlist_ServicesDiscoveryKillAll( p_playlist );
