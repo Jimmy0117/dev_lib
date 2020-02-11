@@ -423,8 +423,6 @@ input_resource_t *input_resource_New( vlc_object_t *p_parent )
     return p_resource;
 }
 
-static  vout_thread_t   *sppp_vout_free[250] = {NULL};
-static  int siFreeCount = 0;
 void input_resource_Release( input_resource_t *p_resource )
 {
     if( atomic_fetch_sub( &p_resource->refs, 1 ) != 1 )
@@ -485,30 +483,6 @@ void input_resource_TerminateVout( input_resource_t *p_resource )
 {
     input_resource_RequestVout( p_resource, NULL, NULL, 0, false );
 }
-// chenyj add function input_resource_HasVout
-#if 1
-bool input_resource_HasSout( input_resource_t *p_resource )
-{
-	vlc_mutex_lock( &p_resource->lock );
-	assert( !p_resource->p_input );
-	const bool b_sout = p_resource->p_sout != NULL;
-	vlc_mutex_unlock( &p_resource->lock );
-
-	return b_sout;
-}
-#endif
-
-// chenyj when pause, re Create Sout
-#if 1
-void reCreateSout(input_resource_t *p_resource)
-{
-	char strPsz_Sout[1024] = "#transcode{vcodec=h264,scale=1,width=800,height=600,fps=15,acodec=mpga,ab=128,channels=2,samplerate=44100}:duplicate{dst=udp{dst=239.1.1.2:5004},dst=display}";
-	
-	msg_Dbg( p_resource->p_parent, "************Enter reCreateSout 0x%x", p_resource->p_sout);
-	DestroySout( p_resource );
-	p_resource->p_sout = sout_NewInstance( p_resource->p_parent, strPsz_Sout );
-}
-#endif
 bool input_resource_HasVout( input_resource_t *p_resource )
 {
     vlc_mutex_lock( &p_resource->lock );

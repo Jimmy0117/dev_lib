@@ -35,8 +35,6 @@
 #include <vlc_rand.h>
 #include "stream_output/stream_output.h"
 #include "playlist_internal.h"
-// chenyj tell client:player is playing. .h file
-#include <vlc_network.h>
 
 /*****************************************************************************
  * Local prototypes

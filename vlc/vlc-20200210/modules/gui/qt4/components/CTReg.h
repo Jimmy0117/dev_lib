@@ -154,9 +154,9 @@ EXIT:
 }
 
 /**
- * @brief  ¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿
+ * @brief  ¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿?
  *
- * @param[in]	strServerAddr  ¿¿¿¿¿¿¿¿¿¿¿¿,eg: http://192.168.4.13:8001 ¿ http://ivycloud-local.com
+ * @param[in]	strServerAddr  ¿¿¿¿¿¿¿¿¿¿¿¿,eg: http://192.168.4.13:8001 ?http://ivycloud-local.com
  * @param[out]	strBroadIp     ¿¿¿¿,eg:  239.1.4.13
  * @return	TRUE   ¿¿
  *          FALSE  ¿¿

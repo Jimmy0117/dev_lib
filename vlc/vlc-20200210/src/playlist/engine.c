@@ -34,14 +34,6 @@
 #include <vlc_interface.h>
 #include "playlist_internal.h"
 #include "input/resource.h"
-#include "CTReg.h"
-#include <vlc_network.h>
-
-
-extern char g_strIpAddress[256];
-
-
-vlc_object_t *g_p_parent = NULL;
 
 /*****************************************************************************
  * Local prototypes
@@ -196,79 +188,6 @@ static int VideoSplitterCallback( vlc_object_t *p_this, char const *psz_cmd,
     return VLC_SUCCESS;
 }
 
-// chenyj create HeartThread
-vlc_thread_t g_heartThread = NULL;
-
-static void *HeartThread(void *p_data)
-{
-	vlc_object_t *p_parent = (vlc_object_t *)p_data;
-	int fd = -1;
-	char strServerIp[256] = "";
-	FILE *stream = NULL;
-	bool bFullScreenStudent = false;
-	int iIpFirst = 0, iIpSecond = 0, iIpThird = 0, iIpForth = 0;
-	char strIp[256] = {0};
-	uint8_t strMessage[256];
-
-	msg_Info(p_parent, "+++++++--->Enter HeartThread");
-	if (( stream  = fopen("serverIp", "r" )) != NULL)
-	{
-		int iRet = fread(strIp, 1, 30, stream);
-		msg_Dbg (p_parent, "$$$$$$$$$, HeartThread, fread serverIp return %d, %s", iRet, strIp);
-		fclose(stream);	  
-	}
-	sscanf(strIp, "%d.%d.%d.%d", &iIpFirst, &iIpSecond, &iIpThird, &iIpForth);
-	msg_Info(p_parent, "++++++++parse to : %d %d %d %d", iIpFirst, iIpSecond, iIpThird, iIpForth);
-
-	for (;;)
-	{
-		Sleep(6*1000);
-
-		if( (stream  = fopen("fullscreenStudent", "r" )) != NULL )
-		{
-			bFullScreenStudent = true;
-			fclose( stream ); 
-		}
-		else
-		{
-			bFullScreenStudent = false;
-		}
-		strMessage[0] = 0x80;
-		strMessage[1] = 0x65;
-		strMessage[2] = bFullScreenStudent ? 0x0 : 0x1;
-		strMessage[3] = iIpFirst;
-		strMessage[4] = iIpSecond;
-		strMessage[5] = iIpThird;
-		strMessage[6] = iIpForth;
-		strMessage[7] = 50;
-		strMessage[8] = 04;
-
-		fd = net_ConnectDgram( p_parent, g_strIpAddress, 5004, -1, 17);
-		if( fd == -1 )
-		{
-			msg_Err( p_parent, "+++++++HeartThread, cannot open socket" );
-			goto T_OUT;
-		} 
-
-		int iRet = send(fd, (const char *)strMessage, 9, 0 ); 
- 
-		msg_Dbg (p_parent, "+++++++HeartThread, send heart retsult(%d)", iRet);
-
-		if (fd != -1)
-		{
-			net_Close( fd );
-		}
-	}
-
-T_OUT:
- 
-	
-	msg_Info(p_parent, "+++++++<---Leave HeartThread");
-
-	return NULL;
-}
-
-int GetLocalIp(vlc_object_t *p_parent, char *strIp);
 /**
  * Create playlist
  *

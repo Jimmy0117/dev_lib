@@ -55,18 +55,6 @@
 #include <vlc_fs.h>
 #include <vlc_strings.h>
 #include <vlc_modules.h>
-// chenyj , we delay play, so delay stop
-#include <vlc_block.h>
-extern block_fifo_t *g_p_fifo;
-extern block_fifo_t *g_p_fifoAudio;
-extern bool g_bPausedAudio;
-extern bool g_bPausedVideo;
-void TellClientPaused();
-void My_Aout_DecChangePause();
-void My_PlayListPlay();
-extern decoder_t *g_p_dec;
-// chenyj test
-double g_iVlc_value_t = 0;
 
 /*****************************************************************************
  * Local prototypes
